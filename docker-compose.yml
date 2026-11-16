@@ -1,0 +1,96 @@
+# SkillUp - sobe tudo com: docker compose up --build
+# Front: http://localhost:3000  |  Gateway: http://localhost:8088  |  RabbitMQ: http://localhost:15672 (guest/guest)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: skillup
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d skillup"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "15672:15672"   # painel de gerenciamento (para a demo)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  core-service:
+    build: ./core-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skillup
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ai-service:
+    build: ./ai-service
+    environment:
+      CORE_URL: http://core-service:8080/api
+      # Opcional: coloque OPENAI_API_KEY=sk-... no arquivo .env. Sem chave, a IA roda em modo mock.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sem-chave}
+    depends_on:
+      - core-service
+
+  ml-service:
+    build: ./ml-service
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      DATA_DIR: /data
+    volumes:
+      - ml_data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  ml-worker:
+    build: ./ml-service
+    command: ["python", "worker.py"]
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      DATA_DIR: /data
+      TREINO_DELAY_SEG: "8"
+    volumes:
+      - ml_data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "8088:8080"
+    environment:
+      CORE_URL: http://core-service:8080
+      AI_URL: http://ai-service:8082
+      ML_URL: http://ml-service:8000
+    depends_on:
+      - core-service
+      - ai-service
+      - ml-service
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://gateway:8080
+    depends_on:
+      - gateway
+
+volumes:
+  postgres_data:
+  ml_data:
