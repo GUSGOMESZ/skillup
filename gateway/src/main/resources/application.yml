@@ -1,0 +1,47 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: skillup-gateway
+  cloud:
+    gateway:
+      # Respostas de IA podem demorar alguns segundos
+      httpclient:
+        connect-timeout: 5000
+        response-timeout: 90s
+      default-filters:
+        - AddResponseHeader=X-SkillUp-Gateway, true
+      routes:
+        # RF01 - cadastro e consulta (monolito modular)
+        - id: core-service
+          uri: ${CORE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/core/**
+          filters:
+            - RewritePath=/api/core/(?<segment>.*), /api/$\{segment}
+
+        # RF03 e RF04 - RAG e agentes (Spring AI)
+        - id: ai-service
+          uri: ${AI_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - RewritePath=/api/ai/(?<segment>.*), /$\{segment}
+
+        # RF02 e RF05 - classificacao e treino (FastAPI)
+        - id: ml-service
+          uri: ${ML_URL:http://localhost:8000}
+          predicates:
+            - Path=/api/ml/**
+          filters:
+            - RewritePath=/api/ml/(?<segment>.*), /$\{segment}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,gateway
+  endpoint:
+    gateway:
+      enabled: true
