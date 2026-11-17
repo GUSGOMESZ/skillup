@@ -1,0 +1,20 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: skillup-ai-service
+  ai:
+    openai:
+      # Sem chave no .env o valor fica "sem-chave" e o servico usa os adapters mock
+      api-key: ${OPENAI_API_KEY:sem-chave}
+      chat:
+        options:
+          model: gpt-4o-mini
+          temperature: 0.2
+      embedding:
+        options:
+          model: text-embedding-3-small
+
+skillup:
+  core-url: ${CORE_URL:http://localhost:8081/api}
